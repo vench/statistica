@@ -36,33 +36,38 @@ type ItemsRequestOrder struct {
 type ItemsRequest struct {
 	DateFrom time.Time
 	DateTo   time.Time
-	Limit    int
-	Offset   int
-	SortBy   []*ItemsRequestOrder
-	Groups   []string
-	Metrics  []string
-	Filters  []*ItemsRequestFilter
+
+	Limit   int
+	Offset  int
+	SortBy  []*ItemsRequestOrder
+	Groups  []string
+	Metrics []string
+	Filters []*ItemsRequestFilter
 }
 
-type ValueType string
+// Metric this struct describe metrics model.
+type Metric struct {
+	// Name contains name for represent metric.
+	Name string
 
-type valueTypeDB string
+	// Description contains description of metric.
+	Description string
 
+	// Expression contains sql expression for computed statistic metric.
+	Expression string
+}
+
+// DimensionKey special type for represent dimensions key.
 type DimensionKey string
 
-type Metric struct {
-	Key         string
-	ValueType   ValueType
-	ValueTotal  string
-	ValueTypeDB valueTypeDB
-	// TODO rename to Expression.
-	ValueDB string
-}
-
+// Dimension this struct describe dimensions model.
 type Dimension struct {
-	Key         DimensionKey
-	ValueType   ValueType
-	ValueTypeDB valueTypeDB
-	// TODO rename to Expression.
-	KeyDB string
+	// Name contains name for represent column.
+	Name DimensionKey
+
+	// Description contains description of column.
+	Description string
+
+	// Expression contains sql expression for column.
+	Expression string
 }

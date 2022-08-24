@@ -34,3 +34,6 @@ lint:
 lint-install:
 	$(V)wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.44.0
 	$(v)./bin/golangci-lint --version
+
+.PHONY: precommit
+precommit: lint test build

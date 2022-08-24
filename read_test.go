@@ -35,31 +35,27 @@ var testQuery = &ItemsRequest{
 	Offset: 1000,
 }
 
-func testRepository(t *testing.T, db *sql.DB) *Repository {
+func testRepository(t *testing.T, db *sql.DB) *SQLRepository {
 	t.Helper()
 
-	return &Repository{
-		conn:  db,
-		table: testTable,
-		mapDimensions: map[DimensionKey]*Dimension{
-			"user_id": {
-				Key:         "user_id",
-				KeyDB:       "user_id",
-				ValueTypeDB: "user",
-			},
-			"geo_id": {
-				Key:         "geo_id",
-				KeyDB:       "geo_id",
-				ValueTypeDB: "geo_id",
-			},
-		},
-		metrics: []*Metric{
+	return NewSQLRepository(db, testTable,
+		[]*Dimension{
 			{
-				Key:     "total",
-				ValueDB: "count(*)",
+				Name:       "user_id",
+				Expression: "user_id",
+			},
+			{
+				Name:       "geo_id",
+				Expression: "geo_id",
 			},
 		},
-	}
+		[]*Metric{
+			{
+				Name:       "total",
+				Expression: "count(*)",
+			},
+		},
+	)
 }
 
 func TestRepository_Ping(t *testing.T) {
@@ -178,8 +174,8 @@ func TestRepository_Metrics(t *testing.T) {
 
 	metrics := []*Metric{
 		{
-			Key:     "total",
-			ValueDB: "count(*)",
+			Name:       "total",
+			Expression: "count(*)",
 		},
 	}
 	require.Equal(t, metrics, list)
@@ -214,19 +210,18 @@ func TestRepository_Grouped(t *testing.T) {
 
 	dimensions := []string{"user_id", "geo_id"}
 	metrics := []string{"total"}
-	columns := append(dimensions, metrics...)
 
-	rows := sqlmock.NewRows(columns)
+	rows := sqlmock.NewRows(append(dimensions, metrics...))
 	for i := range result {
 		r := result[i]
-		values := make([]driver.Value, len(columns))
-		for j, c := range dimensions {
-			values[j] = r.Dimensions[c]
+		values := make([]driver.Value, len(dimensions)+len(metrics))
+		for j, name := range dimensions {
+			values[j] = r.Dimensions[name]
 		}
 
 		offset := len(dimensions)
-		for j, c := range metrics {
-			values[j+offset] = r.Metrics[c]
+		for j, name := range metrics {
+			values[j+offset] = r.Metrics[name]
 		}
 
 		rows.AddRow(values...)

@@ -5,6 +5,7 @@ This package allows you to read statistics from various sources and return stand
 
 ### TODO list
 
-- [ ] base struct
+- [x] base struct
 - [x] store config statistic
 - [ ] operations
+- [ ] add examples - HTTP
