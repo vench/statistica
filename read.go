@@ -6,6 +6,8 @@ import (
 	"math"
 	"reflect"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -23,7 +25,7 @@ type ReadRepository interface {
 	// Values returns list of allowed values with size by query conditions.
 	Values(req *ItemsRequest) ([]*ValueResponse, error)
 	// Grouped returns rows metrics by group filtered by query conditions.
-	Grouped(req *ItemsRequest) ([]*ItemResponse, error)
+	Grouped(req *ItemsRequest) ([]*ItemRow, error)
 	// Metrics returns list of allowed metrics.
 	Metrics() ([]*Metric, error)
 }
@@ -38,27 +40,58 @@ type SQLRepository struct {
 	// contains table name or sql expression like table.
 	table           string
 	totalColumnName string
+
+	logger *zap.Logger
+}
+
+type SQLRepositoryOption func(*SQLRepository)
+
+func LoggerSQLRepositoryOption(logger *zap.Logger) SQLRepositoryOption {
+	return func(repository *SQLRepository) {
+		repository.logger = logger
+	}
 }
 
 // NewSQLRepository returns new instance of SQLRepository.
+// TODO add options
 func NewSQLRepository(
-	connection *sql.DB, table string, dimensions []*Dimension, metrics []*Metric,
+	connection *sql.DB, table string, dimensions []*Dimension, metrics []*Metric, options ...SQLRepositoryOption,
 ) *SQLRepository {
 	mDimensions := make(map[DimensionKey]*Dimension, len(dimensions))
 	for i := range dimensions {
 		mDimensions[dimensions[i].Name] = dimensions[i]
 	}
 
-	return &SQLRepository{
+	r := &SQLRepository{
 		conn:          connection,
 		table:         table,
 		mapDimensions: mDimensions,
 		metrics:       metrics,
+		logger:        zap.NewNop(),
 	}
+
+	for i := range options {
+		options[i](r)
+	}
+
+	return r
 }
 
 func (r *SQLRepository) Metrics() ([]*Metric, error) {
 	return r.metrics, nil
+}
+
+func makeDestFromTypes(types []*sql.ColumnType) []interface{} {
+	dest := make([]interface{}, len(types))
+	for i, item := range types {
+		if item.DatabaseTypeName() != "" {
+			dest[i] = reflect.New(item.ScanType()).Interface()
+		} else {
+			dest[i] = new(interface{})
+		}
+	}
+
+	return dest
 }
 
 func (r *SQLRepository) Total(req *ItemsRequest) (uint64, error) {
@@ -66,8 +99,10 @@ func (r *SQLRepository) Total(req *ItemsRequest) (uint64, error) {
 	params := make([]interface{}, 0)
 
 	r.applySelectTotal(req, &query)
-	query += fmt.Sprintf(` FROM %s`, r.table)
+	query += fmt.Sprintf(" FROM %s", r.table)
 	r.applyWhere(req, &query, &params)
+
+	r.logger.Debug("total query", zap.String("query", query))
 
 	rows, err := r.conn.Query(query, params...)
 	if err != nil {
@@ -80,23 +115,30 @@ func (r *SQLRepository) Total(req *ItemsRequest) (uint64, error) {
 		return 0, err
 	}
 
+	r.logger.Debug("types", zap.Reflect("types", types))
+
 	if rows.Next() {
-		dest := make([]interface{}, 0)
-		for _, item := range types {
-			v := reflect.New(item.ScanType()).Interface()
-			dest = append(dest, v)
-		}
+		dest := makeDestFromTypes(types)
 
 		if err := rows.Scan(dest...); err != nil {
 			return 0, err
 		}
 
-		for i, item := range types {
-			if item.Name() != r.getTotalColumnName() {
-				continue
+		for i := range dest {
+			pv, ok := dest[i].(*interface{})
+			if ok {
+				dest[i] = *pv
 			}
-			if vi, ok := dest[i].(*uint64); ok {
-				return *vi, nil
+
+			value := SafeNaN(dest[i])
+			r.logger.Debug("value", zap.Reflect("value", value))
+
+			if total, ok := castUInt64(value); ok {
+				return total, nil
+			}
+
+			if total, ok := castInt64(value); ok {
+				return uint64(total), nil
 			}
 		}
 	}
@@ -128,11 +170,7 @@ func (r *SQLRepository) Values(req *ItemsRequest) ([]*ValueResponse, error) {
 
 	response := make([]*ValueResponse, 0)
 	for rows.Next() {
-		dest := make([]interface{}, 0)
-		for _, item := range types {
-			v := reflect.New(item.ScanType()).Interface()
-			dest = append(dest, v)
-		}
+		dest := makeDestFromTypes(types)
 
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
@@ -164,7 +202,7 @@ func (r *SQLRepository) Values(req *ItemsRequest) ([]*ValueResponse, error) {
 	return response, nil
 }
 
-func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemResponse, error) {
+func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemRow, error) {
 	query := ""
 	params := make([]interface{}, 0)
 
@@ -174,6 +212,8 @@ func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemResponse, error) {
 	r.applyGroup(req, &query)
 	r.applyOrder(req, &query)
 	r.applyLimit(req, &query)
+
+	r.logger.Debug("grouped query", zap.String("query", query))
 
 	rows, err := r.conn.Query(query, params...)
 	if err != nil {
@@ -186,19 +226,17 @@ func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemResponse, error) {
 		return nil, err
 	}
 
-	response := make([]*ItemResponse, 0)
+	r.logger.Debug("types", zap.Reflect("types", types))
+
+	response := make([]*ItemRow, 0)
 	for rows.Next() {
-		dest := make([]interface{}, 0)
-		for _, item := range types {
-			v := reflect.New(item.ScanType()).Interface()
-			dest = append(dest, v)
-		}
+		dest := makeDestFromTypes(types)
 
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 
-		itemResp := &ItemResponse{
+		itemResp := &ItemRow{
 			Dimensions: make(map[string]interface{}),
 			Metrics:    make(map[string]interface{}),
 		}
@@ -244,13 +282,13 @@ func (r *SQLRepository) applyOrder(req *ItemsRequest, query *string) {
 				continue
 			}
 
-			sort := fmt.Sprintf(`%s %s`, field.Expression, item.Direction)
+			sort := fmt.Sprintf("%s %s", field.Expression, item.Direction)
 			sortBy = append(sortBy, sort)
 		}
 	}
 
 	if len(sortBy) > 0 {
-		*query += ` ORDER BY ` + strings.Join(sortBy, `,`)
+		*query += " ORDER BY " + strings.Join(sortBy, ",")
 	}
 }
 
@@ -343,7 +381,7 @@ func (r *SQLRepository) getTotalColumnName() string {
 }
 
 func (r *SQLRepository) applySelectValue(req *ItemsRequest, query *string) {
-	*query += `SELECT `
+	*query += "SELECT "
 
 	if len(req.Groups) > 0 {
 		dimGroup := make([]string, 0)
@@ -354,13 +392,13 @@ func (r *SQLRepository) applySelectValue(req *ItemsRequest, query *string) {
 			}
 			dimGroup = append(dimGroup, field.Expression)
 		}
-		*query += strings.Join(dimGroup, `,`) + `, `
+		*query += strings.Join(dimGroup, ",") + ", "
 	}
-	*query += fmt.Sprintf(`count(*) AS %s`, r.getTotalColumnName())
+	*query += fmt.Sprintf("count(*) AS %s", r.getTotalColumnName())
 }
 
 func (r *SQLRepository) applySelect(req *ItemsRequest, query *string) {
-	*query += `SELECT `
+	*query += "SELECT "
 
 	if len(req.Groups) > 0 {
 		dimGroup := make([]string, 0)
@@ -371,7 +409,7 @@ func (r *SQLRepository) applySelect(req *ItemsRequest, query *string) {
 			}
 			dimGroup = append(dimGroup, field.Expression)
 		}
-		*query += strings.Join(dimGroup, `,`) + `, `
+		*query += strings.Join(dimGroup, ",") + ", "
 	}
 
 	metrics := make([]string, 0, len(r.metrics))
@@ -380,14 +418,14 @@ func (r *SQLRepository) applySelect(req *ItemsRequest, query *string) {
 		metrics = append(metrics, m.Expression+` AS `+m.Name)
 	}
 
-	*query += strings.Join(metrics, `,`)
+	*query += strings.Join(metrics, ",")
 }
 
 func (r *SQLRepository) applyLimit(req *ItemsRequest, query *string) {
 	if req.Limit > 0 && req.Offset > 0 {
-		*query += fmt.Sprintf(` LIMIT %d,%d`, req.Offset, req.Limit)
+		*query += fmt.Sprintf(" LIMIT %d, %d", req.Offset, req.Limit)
 	} else if req.Limit > 0 {
-		*query += fmt.Sprintf(` LIMIT %d`, req.Limit)
+		*query += fmt.Sprintf(" LIMIT %d", req.Limit)
 	}
 }
 
@@ -398,4 +436,38 @@ func SafeNaN(i interface{}) interface{} {
 	}
 
 	return i
+}
+
+func castUInt64(value interface{}) (uint64, bool) {
+	switch t := value.(type) {
+	case uint64:
+		return t, true
+	case uint32:
+		return uint64(t), true
+	case uint16:
+		return uint64(t), true
+	case uint8:
+		return uint64(t), true
+	case uint:
+		return uint64(t), true
+	}
+
+	return 0, false
+}
+
+func castInt64(value interface{}) (int64, bool) {
+	switch t := value.(type) {
+	case int64:
+		return t, true
+	case int32:
+		return int64(t), true
+	case int16:
+		return int64(t), true
+	case int8:
+		return int64(t), true
+	case int:
+		return int64(t), true
+	}
+
+	return 0, false
 }

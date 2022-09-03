@@ -12,13 +12,14 @@ type ValuesResponse struct {
 	Values []*ValueResponse `json:"values"`
 }
 
-type ItemResponse struct {
+// ItemRow this struct represent one row of statistic.
+type ItemRow struct {
 	Dimensions map[string]interface{}
 	Metrics    map[string]interface{}
 }
 
 type ItemsResponse struct {
-	Rows  []*ItemResponse
+	Rows  []*ItemRow
 	Total uint64
 }
 

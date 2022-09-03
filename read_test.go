@@ -127,7 +127,7 @@ func TestRepository_Values(t *testing.T) {
 			"^"+regexp.QuoteMeta(
 				"SELECT user_id,geo_id, count(*) AS total "+
 					"FROM test_table WHERE geo_id IN (?,?,?) GROUP BY user_id,geo_id  "+
-					"ORDER BY user_id desc LIMIT 1000,100")+"$",
+					"ORDER BY user_id desc LIMIT 1000, 100")+"$",
 		).
 		WithArgs(1, 2, 4).
 		WillReturnRows(rows)
@@ -187,7 +187,7 @@ func TestRepository_Grouped(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	result := []*ItemResponse{
+	result := []*ItemRow{
 		{
 			Dimensions: map[string]interface{}{
 				"user_id": int64(1000),
@@ -232,7 +232,7 @@ func TestRepository_Grouped(t *testing.T) {
 			"^"+regexp.QuoteMeta(
 				"SELECT user_id,geo_id, count(*) AS total "+
 					"FROM test_table WHERE geo_id IN (?,?,?) GROUP BY user_id,geo_id  "+
-					"ORDER BY user_id desc LIMIT 1000,100")+"$",
+					"ORDER BY user_id desc LIMIT 1000, 100")+"$",
 		).
 		WithArgs(1, 2, 4).
 		WillReturnRows(rows)
