@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -17,9 +18,29 @@ import (
 
 const dateFormat = "2006-01-02"
 
+var formatsDateType = []string{dateFormat}
+
+type dateType struct {
+	time.Time
+}
+
+func (d *dateType) UnmarshalJSON(v []byte) error {
+	s := strings.Trim(string(v), "\"")
+
+	for i := range formatsDateType {
+		if t, err := time.Parse(formatsDateType[i], s); err == nil {
+			d.Time = t
+
+			break
+		}
+	}
+
+	return nil
+}
+
 type requestQuery struct {
-	DateFrom time.Time `json:"date_from"`
-	DateTo   time.Time `json:"date_to"`
+	DateFrom dateType `json:"date_from"`
+	DateTo   dateType `json:"date_to"`
 
 	Limit   int            `json:"limit"`
 	Offset  int            `json:"offset"`
@@ -205,6 +226,10 @@ func initRepository(db *sql.DB) *statistica.SQLRepository {
 			{
 				Name:       "event_type",
 				Expression: "etype",
+			},
+			{
+				Name:       "created",
+				Expression: "created",
 			},
 		},
 		[]*statistica.Metric{

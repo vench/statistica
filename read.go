@@ -10,23 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type Condition string
-
-const (
-	CondEq  Condition = "eq"
-	CondEq2 Condition = "="
-
-	CondNotEq  Condition = "neq"
-	CondNotEq2 Condition = "!="
-
-	CondLike Condition = "like"
-
-	CondGreater     Condition = ">"
-	CondGreaterOrEq Condition = ">="
-	CondLess        Condition = "<"
-	CondLessOrEq    Condition = "<="
-)
-
 // ReadRepository common read interface.
 type ReadRepository interface {
 	// Total returns total rows by query conditions.
@@ -47,14 +30,18 @@ type SQLRepository struct {
 	metrics       []*Metric
 
 	// contains table name or sql expression like table.
-	table           string
+	table string
+
+	// contains name column for total value.
 	totalColumnName string
 
 	logger *zap.Logger
 }
 
+// SQLRepositoryOption todo.
 type SQLRepositoryOption func(*SQLRepository)
 
+// LoggerSQLRepositoryOption todo.
 func LoggerSQLRepositoryOption(logger *zap.Logger) SQLRepositoryOption {
 	return func(repository *SQLRepository) {
 		repository.logger = logger
@@ -85,6 +72,7 @@ func NewSQLRepository(
 	return r
 }
 
+// Metrics returns allowed metrics.
 func (r *SQLRepository) Metrics() ([]*Metric, error) {
 	return r.metrics, nil
 }
@@ -102,7 +90,10 @@ func makeDestFromTypes(types []*sql.ColumnType) []interface{} {
 	return dest
 }
 
+// Total returns total rows by query ItemsRequest.
 func (r *SQLRepository) Total(req *ItemsRequest) (uint64, error) {
+	r.logger.Debug("request", zap.Reflect("request", req))
+
 	query := ""
 	params := make([]interface{}, 0)
 
@@ -110,7 +101,7 @@ func (r *SQLRepository) Total(req *ItemsRequest) (uint64, error) {
 	query += fmt.Sprintf(" FROM %s", r.table)
 	r.applyWhere(req, &query, &params)
 
-	r.logger.Debug("total query", zap.String("query", query))
+	r.logger.Debug("total query SQL", zap.String("query", query))
 
 	rows, err := r.conn.Query(query, params...)
 	if err != nil {
@@ -128,17 +119,12 @@ func (r *SQLRepository) Total(req *ItemsRequest) (uint64, error) {
 	if rows.Next() {
 		dest := makeDestFromTypes(types)
 
-		if err := rows.Scan(dest...); err != nil {
+		if err = rows.Scan(dest...); err != nil {
 			return 0, err
 		}
 
 		for i := range dest {
-			pv, ok := dest[i].(*interface{})
-			if ok {
-				dest[i] = *pv
-			}
-
-			value := SafeNaN(dest[i])
+			value := safeNaN(unwrapPointerInterface(dest[i]))
 			r.logger.Debug("value", zap.Reflect("value", value))
 
 			if total, ok := castUInt64(value); ok {
@@ -154,12 +140,13 @@ func (r *SQLRepository) Total(req *ItemsRequest) (uint64, error) {
 	return 0, nil
 }
 
+// Values returns values ValueResponse by query ItemsRequest.
 func (r *SQLRepository) Values(req *ItemsRequest) ([]*ValueResponse, error) {
-	query := ``
+	query := ""
 	params := make([]interface{}, 0)
 
 	r.applySelectValue(req, &query)
-	query += fmt.Sprintf(` FROM %s `, r.table)
+	query += fmt.Sprintf(" FROM %s ", r.table)
 	r.applyWhere(req, &query, &params)
 	r.applyGroup(req, &query)
 	r.applyOrder(req, &query)
@@ -180,28 +167,22 @@ func (r *SQLRepository) Values(req *ItemsRequest) ([]*ValueResponse, error) {
 	for rows.Next() {
 		dest := makeDestFromTypes(types)
 
-		if err := rows.Scan(dest...); err != nil {
+		if err = rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 
 		itemResp := &ValueResponse{
-			Key:   make([]interface{}, 0),
-			Name:  make([]interface{}, 0),
+			Key:   make([]interface{}, len(req.Groups)),
+			Name:  make([]interface{}, len(req.Groups)),
 			Count: 0,
 		}
-		for i, item := range types {
-			_ = item
 
-			pv, ok := dest[i].(*interface{})
-			if ok {
-				dest[i] = *pv
-			}
-
+		for i := range types {
 			if len(req.Groups) > i {
-				itemResp.Name = append(itemResp.Name, req.Groups[i])
-				itemResp.Key = append(itemResp.Key, dest[i])
+				itemResp.Name[i] = req.Groups[i]
+				itemResp.Key[i] = unwrapPointerInterface(dest[i])
 			} else {
-				itemResp.Count = SafeNaN(dest[i])
+				itemResp.Count = safeNaN(unwrapPointerInterface(dest[i]))
 			}
 		}
 		response = append(response, itemResp)
@@ -211,6 +192,8 @@ func (r *SQLRepository) Values(req *ItemsRequest) ([]*ValueResponse, error) {
 }
 
 func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemRow, error) {
+	r.logger.Debug("request ItemsRequest", zap.Reflect("request", req))
+
 	query := ""
 	params := make([]interface{}, 0)
 
@@ -249,16 +232,11 @@ func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemRow, error) {
 			Metrics:    make(map[string]interface{}),
 		}
 
-		for i, item := range types {
-			pv, ok := dest[i].(*interface{})
-			if ok {
-				dest[i] = *pv
-			}
-
+		for i := range types {
 			if len(req.Groups) > i {
-				itemResp.Dimensions[req.Groups[i]] = dest[i]
+				itemResp.Dimensions[req.Groups[i]] = unwrapPointerInterface(dest[i])
 			} else {
-				itemResp.Metrics[item.Name()] = SafeNaN(dest[i])
+				itemResp.Metrics[types[i].Name()] = safeNaN(unwrapPointerInterface(dest[i]))
 			}
 		}
 		response = append(response, itemResp)
@@ -328,20 +306,20 @@ func (r *SQLRepository) applyWhere(req *ItemsRequest, query *string, params *[]i
 				*params = append(*params, filter.Values...)
 
 				if len(where) > 0 {
-					where += ` AND `
+					where += " AND "
 				}
 
 				switch filter.Condition {
 				case CondEq, CondEq2:
 					in := strings.TrimRight(strings.Repeat("?,", len(filter.Values)), ",")
-					where += fmt.Sprintf(`%s IN (%s)`, key, in)
+					where += fmt.Sprintf("%s IN (%s)", key, in)
 
 				case CondNotEq, CondNotEq2:
-					in := strings.Repeat(`?,`, len(filter.Values))
-					where += fmt.Sprintf(`%s NOT IN (%s)`, key, in)
+					in := strings.Repeat("?,", len(filter.Values))
+					where += fmt.Sprintf("%s NOT IN (%s)", key, in)
 
 				case CondLike:
-					where += fmt.Sprintf(`%s LIKE '%s)`, key, `%?%'`)
+					where += fmt.Sprintf("%s LIKE '%s'", key, "%?%")
 
 				case CondGreater:
 					where += fmt.Sprintf("%s > ?", key)
@@ -364,7 +342,7 @@ func (r *SQLRepository) applyWhere(req *ItemsRequest, query *string, params *[]i
 	}
 
 	if len(where) > 0 {
-		*query += fmt.Sprintf(` WHERE %s`, where)
+		*query += fmt.Sprintf(" WHERE %s", where)
 	}
 }
 
@@ -379,11 +357,12 @@ func (r *SQLRepository) applySelectTotal(req *ItemsRequest, query *string) {
 			dimGroup = append(dimGroup, dim.Expression)
 		}
 
-		*query += fmt.Sprintf(`SELECT uniq(%s) AS %s`, strings.Join(dimGroup, `,`), r.getTotalColumnName())
+		// TODO remove uniq
+		*query += fmt.Sprintf("SELECT uniq(%s) AS %s", strings.Join(dimGroup, ","), r.getTotalColumnName())
 		return
 	}
 
-	*query += fmt.Sprintf(`SELECT count(*) AS %s`, r.getTotalColumnName())
+	*query += fmt.Sprintf("SELECT count(*) AS %s", r.getTotalColumnName())
 }
 
 func (r *SQLRepository) getTotalColumnName() string {
@@ -443,10 +422,17 @@ func (r *SQLRepository) applyLimit(req *ItemsRequest, query *string) {
 	}
 }
 
-func SafeNaN(i interface{}) interface{} {
-	if iv, ok := i.(*float64); ok && (math.IsNaN(*iv) || math.IsInf(*iv, 0)) {
-		*iv = 0
-		return iv
+func unwrapPointerInterface(i interface{}) interface{} {
+	if pv, ok := i.(*interface{}); ok {
+		return *pv
+	}
+
+	return i
+}
+
+func safeNaN(i interface{}) interface{} {
+	if iv, ok := i.(float64); ok && (math.IsNaN(iv) || math.IsInf(iv, 0)) {
+		return 0
 	}
 
 	return i

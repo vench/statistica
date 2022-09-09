@@ -2,9 +2,14 @@ package statistica
 
 // ValueResponse this struct represents value response.
 type ValueResponse struct {
-	Name  []interface{} `json:"name"`
-	Key   []interface{} `json:"key"`
-	Count interface{}   `json:"count"`
+	// Name value from query.
+	Name []interface{} `json:"name"`
+
+	// Key value from DB.
+	Key []interface{} `json:"key"`
+
+	//	Count size by value Key.
+	Count interface{} `json:"count"`
 }
 
 // ValuesResponse this struct represents values response.
