@@ -15,16 +15,18 @@ import (
 	"github.com/vench/statistica"
 )
 
+const dateFormat = "2006-01-02"
+
 type requestQuery struct {
 	DateFrom time.Time `json:"date_from"`
 	DateTo   time.Time `json:"date_to"`
 
-	Limit  int `json:"limit"`
-	Offset int `json:"offset"`
-	// SortBy  []*ItemsRequestOrder
-	Groups  []string `json:"groups"`
-	Metrics []string `json:"metrics"`
-	// Filters []*ItemsRequestFilter
+	Limit   int            `json:"limit"`
+	Offset  int            `json:"offset"`
+	SortBy  []interface{}  `json:"sort_by"`
+	Groups  []string       `json:"groups"`
+	Metrics []string       `json:"metrics"`
+	Filters []*interface{} `json:"filters"`
 }
 
 func requestFromQuery(r *http.Request) (*statistica.ItemsRequest, error) {
@@ -39,12 +41,26 @@ func requestFromQuery(r *http.Request) (*statistica.ItemsRequest, error) {
 	}
 
 	request := &statistica.ItemsRequest{
-		DateFrom: rQuery.DateFrom,
-		DateTo:   rQuery.DateTo,
-		Limit:    rQuery.Limit,
-		Offset:   rQuery.Offset,
-		Groups:   rQuery.Groups,
-		Metrics:  rQuery.Metrics,
+		Limit:   rQuery.Limit,
+		Offset:  rQuery.Offset,
+		Groups:  rQuery.Groups,
+		Metrics: rQuery.Metrics,
+		Filters: make([]*statistica.ItemsRequestFilter, 0),
+	}
+
+	if !rQuery.DateFrom.IsZero() {
+		request.Filters = append(request.Filters, &statistica.ItemsRequestFilter{
+			Key:       "created",
+			Condition: ">=",
+			Values:    []interface{}{rQuery.DateFrom.Format(dateFormat)},
+		})
+	}
+	if !rQuery.DateTo.IsZero() {
+		request.Filters = append(request.Filters, &statistica.ItemsRequestFilter{
+			Key:       "created",
+			Condition: "<=",
+			Values:    []interface{}{rQuery.DateTo.Format(dateFormat)},
+		})
 	}
 
 	return request, nil

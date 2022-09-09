@@ -10,12 +10,21 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	CondEq    = "eq"
-	CondNotEq = "neq"
-	CondLike  = "like"
+type Condition string
 
-	dateFormat = "2006-01-02"
+const (
+	CondEq  Condition = "eq"
+	CondEq2 Condition = "="
+
+	CondNotEq  Condition = "neq"
+	CondNotEq2 Condition = "!="
+
+	CondLike Condition = "like"
+
+	CondGreater     Condition = ">"
+	CondGreaterOrEq Condition = ">="
+	CondLess        Condition = "<"
+	CondLessOrEq    Condition = "<="
 )
 
 // ReadRepository common read interface.
@@ -53,7 +62,6 @@ func LoggerSQLRepositoryOption(logger *zap.Logger) SQLRepositoryOption {
 }
 
 // NewSQLRepository returns new instance of SQLRepository.
-// TODO add options
 func NewSQLRepository(
 	connection *sql.DB, table string, dimensions []*Dimension, metrics []*Metric, options ...SQLRepositoryOption,
 ) *SQLRepository {
@@ -307,12 +315,6 @@ func (r *SQLRepository) getDimension(key DimensionKey) (*Dimension, bool) {
 func (r *SQLRepository) applyWhere(req *ItemsRequest, query *string, params *[]interface{}) {
 	where := ""
 
-	// TODO remove
-	if !req.DateFrom.IsZero() && !req.DateTo.IsZero() {
-		where += "AND EventDate BETWEEN ? AND ? "
-		*params = append(*params, req.DateFrom.Format(dateFormat), req.DateTo.Format(dateFormat))
-	}
-
 	if len(req.Filters) > 0 {
 		for _, filter := range req.Filters {
 			field, exists := r.getDimension(DimensionKey(filter.Key))
@@ -330,16 +332,28 @@ func (r *SQLRepository) applyWhere(req *ItemsRequest, query *string, params *[]i
 				}
 
 				switch filter.Condition {
-				case CondEq:
+				case CondEq, CondEq2:
 					in := strings.TrimRight(strings.Repeat("?,", len(filter.Values)), ",")
 					where += fmt.Sprintf(`%s IN (%s)`, key, in)
 
-				case CondNotEq:
+				case CondNotEq, CondNotEq2:
 					in := strings.Repeat(`?,`, len(filter.Values))
 					where += fmt.Sprintf(`%s NOT IN (%s)`, key, in)
 
 				case CondLike:
 					where += fmt.Sprintf(`%s LIKE '%s)`, key, `%?%'`)
+
+				case CondGreater:
+					where += fmt.Sprintf("%s > ?", key)
+
+				case CondGreaterOrEq:
+					where += fmt.Sprintf("%s >= ?", key)
+
+				case CondLess:
+					where += fmt.Sprintf("%s < ?", key)
+
+				case CondLessOrEq:
+					where += fmt.Sprintf("%s <= ?", key)
 
 				default:
 					in := strings.TrimRight(strings.Repeat("?,", len(filter.Values)), ",")

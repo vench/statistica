@@ -1,15 +1,21 @@
 package statistica
 
-import "time"
-
+// ValueResponse this struct represents value response.
 type ValueResponse struct {
 	Name  []interface{} `json:"name"`
 	Key   []interface{} `json:"key"`
 	Count interface{}   `json:"count"`
 }
 
+// ValuesResponse this struct represents values response.
 type ValuesResponse struct {
 	Values []*ValueResponse `json:"values"`
+}
+
+// ItemsResponse this struct represents group response.
+type ItemsResponse struct {
+	Rows  []*ItemRow
+	Total uint64
 }
 
 // ItemRow this struct represent one row of statistic.
@@ -18,28 +24,24 @@ type ItemRow struct {
 	Metrics    map[string]interface{}
 }
 
-type ItemsResponse struct {
-	Rows  []*ItemRow
-	Total uint64
-}
-
+// ItemsRequestFilter this struct represents request filter.
 type ItemsRequestFilter struct {
 	Key       string
 	Values    []interface{}
-	Condition string
+	Condition Condition
 }
 
+// ItemsRequestOrder this struct represents request order options.
 type ItemsRequestOrder struct {
 	Key       string
 	Direction string
 }
 
+// ItemsRequest this struct represents request query.
 type ItemsRequest struct {
-	DateFrom time.Time
-	DateTo   time.Time
+	Limit  int
+	Offset int
 
-	Limit   int
-	Offset  int
 	SortBy  []*ItemsRequestOrder
 	Groups  []string
 	Metrics []string

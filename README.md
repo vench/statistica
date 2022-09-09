@@ -5,7 +5,7 @@ This package allows you to read statistics from various sources and return stand
 
 ## Examples
 
-- Example of integration with http server [link](examples/http) 
+- Example of integration with HTTP server [link](examples/http) 
 
 
 ### TODO list
