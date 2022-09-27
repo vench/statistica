@@ -119,7 +119,7 @@ func (r *SQLRepository) Total(req *ItemsRequest) (uint64, error) {
 	if rows.Next() {
 		dest := makeDestFromTypes(types)
 
-		if err = rows.Scan(dest...); err != nil {
+		if err := rows.Scan(dest...); err != nil {
 			return 0, err
 		}
 
@@ -167,7 +167,7 @@ func (r *SQLRepository) Values(req *ItemsRequest) ([]*ValueResponse, error) {
 	for rows.Next() {
 		dest := makeDestFromTypes(types)
 
-		if err = rows.Scan(dest...); err != nil {
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 
@@ -450,6 +450,16 @@ func castUInt64(value interface{}) (uint64, bool) {
 		return uint64(t), true
 	case uint:
 		return uint64(t), true
+	case *uint64:
+		return *t, true
+	case *uint32:
+		return uint64(*t), true
+	case *uint16:
+		return uint64(*t), true
+	case *uint8:
+		return uint64(*t), true
+	case *uint:
+		return uint64(*t), true
 	}
 
 	return 0, false
@@ -467,6 +477,17 @@ func castInt64(value interface{}) (int64, bool) {
 		return int64(t), true
 	case int:
 		return int64(t), true
+
+	case *int64:
+		return *t, true
+	case *int32:
+		return int64(*t), true
+	case *int16:
+		return int64(*t), true
+	case *int8:
+		return int64(*t), true
+	case *int:
+		return int64(*t), true
 	}
 
 	return 0, false
