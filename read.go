@@ -182,7 +182,7 @@ func (r *SQLRepository) Values(req *ItemsRequest) ([]*ValueResponse, error) {
 				itemResp.Name[i] = req.Groups[i]
 				itemResp.Key[i] = unwrapPointerInterface(dest[i])
 			} else {
-				itemResp.Count = safeNaN(unwrapPointerInterface(dest[i]))
+				itemResp.Count = castValueNumber(dest[i])
 			}
 		}
 		response = append(response, itemResp)
@@ -229,14 +229,14 @@ func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemRow, error) {
 
 		itemResp := &ItemRow{
 			Dimensions: make(map[string]interface{}),
-			Metrics:    make(map[string]interface{}),
+			Metrics:    make(map[string]ValueNumber),
 		}
 
 		for i := range types {
 			if len(req.Groups) > i {
 				itemResp.Dimensions[req.Groups[i]] = unwrapPointerInterface(dest[i])
 			} else {
-				itemResp.Metrics[types[i].Name()] = safeNaN(unwrapPointerInterface(dest[i]))
+				itemResp.Metrics[types[i].Name()] = castValueNumber(dest[i])
 			}
 		}
 		response = append(response, itemResp)
@@ -436,6 +436,40 @@ func safeNaN(i interface{}) interface{} {
 	}
 
 	return i
+}
+
+func castValueNumber(value interface{}) ValueNumber {
+	value = unwrapPointerInterface(value)
+
+	if v, ok := castFloat64(value); ok {
+		return ValueNumber(v)
+	}
+
+	if v, ok := castUInt64(value); ok {
+		return ValueNumber(v)
+	}
+
+	if v, ok := castInt64(value); ok {
+		return ValueNumber(v)
+	}
+
+	return 0
+}
+
+func castFloat64(value interface{}) (float64, bool) {
+	switch t := value.(type) {
+	case float64:
+		return t, true
+	case float32:
+		return float64(t), true
+
+	case *float64:
+		return *t, true
+	case *float32:
+		return float64(*t), true
+	}
+
+	return 0, false
 }
 
 func castUInt64(value interface{}) (uint64, bool) {

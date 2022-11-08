@@ -1,5 +1,8 @@
 package statistica
 
+// ValueNumber special type for representation number value.
+type ValueNumber float64
+
 // ValueResponse this struct represents value response.
 type ValueResponse struct {
 	// Name value from query.
@@ -9,7 +12,7 @@ type ValueResponse struct {
 	Key []interface{} `json:"key"`
 
 	//	Count size by value Key.
-	Count interface{} `json:"count"`
+	Count ValueNumber `json:"count"`
 }
 
 // ValuesResponse this struct represents values response.
@@ -20,13 +23,13 @@ type ValuesResponse struct {
 // ItemsResponse this struct represents group response.
 type ItemsResponse struct {
 	Rows  []*ItemRow
-	Total uint64
+	Total ValueNumber
 }
 
 // ItemRow this struct represent one row of statistic.
 type ItemRow struct {
 	Dimensions map[string]interface{}
-	Metrics    map[string]interface{}
+	Metrics    map[string]ValueNumber
 }
 
 // ItemsRequestFilter this struct represents request filter.

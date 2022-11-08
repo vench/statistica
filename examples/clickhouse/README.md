@@ -3,7 +3,7 @@
 Run docker image ClickHouse database
 ```shell
 $ mkdir $HOME/some_clickhouse_database
-$ docker run -d --name some-clickhouse-server --ulimit nofile=262144:262144 --volume=$HOME/some_clickhouse_database:/var/lib/clickhouse yandex/clickhouse-server 
+$ docker run -d -p 18123:8123 -p19000:9000 -p19090:9090 --name some-clickhouse-server --ulimit nofile=262144:262144 --volume=$HOME/some_clickhouse_database:/var/lib/clickhouse yandex/clickhouse-server 
 ```
 
 Then create database and table

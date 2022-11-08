@@ -87,7 +87,7 @@ func TestRepository_Values(t *testing.T) {
 			Key: []interface{}{
 				int64(100), int64(10),
 			},
-			Count: int64(100),
+			Count: ValueNumber(100),
 		},
 		{
 			Name: []interface{}{
@@ -96,7 +96,7 @@ func TestRepository_Values(t *testing.T) {
 			Key: []interface{}{
 				int64(100), int64(20),
 			},
-			Count: int64(200),
+			Count: ValueNumber(200),
 		},
 		{
 			Name: []interface{}{
@@ -105,7 +105,7 @@ func TestRepository_Values(t *testing.T) {
 			Key: []interface{}{
 				int64(200), int64(10),
 			},
-			Count: int64(170),
+			Count: ValueNumber(170),
 		},
 	}
 
@@ -193,8 +193,8 @@ func TestRepository_Grouped(t *testing.T) {
 				"user_id": int64(1000),
 				"geo_id":  int64(512),
 			},
-			Metrics: map[string]interface{}{
-				"total": float64(2000),
+			Metrics: map[string]ValueNumber{
+				"total": ValueNumber(2000),
 			},
 		},
 		{
@@ -202,8 +202,8 @@ func TestRepository_Grouped(t *testing.T) {
 				"user_id": int64(1001),
 				"geo_id":  int64(512),
 			},
-			Metrics: map[string]interface{}{
-				"total": float64(4000),
+			Metrics: map[string]ValueNumber{
+				"total": ValueNumber(4000),
 			},
 		},
 	}

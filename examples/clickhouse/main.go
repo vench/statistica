@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	dataSourceName := flag.String("source", "tcp://127.0.0.1:9090?debug=false&database=develop", "")
+	dataSourceName := flag.String("source", "tcp://127.0.0.1:19090?debug=true&database=&username=default", "")
 	flag.Parse()
 
 	conn, err := sql.Open("clickhouse", *dataSourceName)
