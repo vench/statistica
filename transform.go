@@ -65,12 +65,10 @@ func UnionValuesResponse(response ...*ValuesResponse) *ValuesResponse {
 	}
 }
 
-// TODO optimize key create
 func makeKeyUnionMap(v *ItemRow) keyUnion {
 	return keyUnion(fmt.Sprintf("%v", v.Dimensions))
 }
 
-// TODO optimize key create
 func makeKeyUnion(v *ValueResponse) keyUnion {
 	return keyUnion(fmt.Sprintf("%v", v.Key))
 }
@@ -81,11 +79,10 @@ func unionRowResponse(a, b *ItemRow) {
 	}
 
 	for k := range b.Metrics {
-		if _, ok := a.Metrics[k]; ok {
-			a.Metrics[k] += b.Metrics[k]
-		} else {
-			a.Metrics[k] = b.Metrics[k]
+		if _, ok := a.Metrics[k]; !ok {
+			a.Metrics[k] = 0
 		}
+		a.Metrics[k] += b.Metrics[k]
 	}
 }
 
