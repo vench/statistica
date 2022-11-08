@@ -17,6 +17,50 @@ func Test_UnionItemsResponse(t *testing.T) {
 		{
 			name: "empty",
 		},
+		{
+			name: "base union",
+			input: []*ItemsResponse{
+				{
+					Rows: []*ItemRow{
+						{
+							Dimensions: map[string]interface{}{
+								"k1": "key1",
+							},
+							Metrics: map[string]ValueNumber{
+								"m1": 100,
+							},
+						},
+					},
+					Total: castValueNumber(100),
+				},
+				{
+					Rows: []*ItemRow{
+						{
+							Dimensions: map[string]interface{}{
+								"k1": "key1",
+							},
+							Metrics: map[string]ValueNumber{
+								"m1": 200,
+							},
+						},
+					},
+					Total: castValueNumber(100),
+				},
+			},
+			expected: &ItemsResponse{
+				Rows: []*ItemRow{
+					{
+						Dimensions: map[string]interface{}{
+							"k1": "key1",
+						},
+						Metrics: map[string]ValueNumber{
+							"m1": 300,
+						},
+					},
+				},
+				Total: 200,
+			},
+		},
 	}
 
 	for i := range tt {
@@ -66,6 +110,24 @@ func Test_unionValueResponse(t *testing.T) {
 	}{
 		{
 			name: "empty",
+		},
+		{
+			name: "base union",
+			a: &ValueResponse{
+				Name:  []interface{}{"n1", "n2"},
+				Key:   []interface{}{"k1", "k2"},
+				Count: 100,
+			},
+			b: &ValueResponse{
+				Name:  []interface{}{"n1", "n2"},
+				Key:   []interface{}{"k1", "k2"},
+				Count: 200,
+			},
+			expected: &ValueResponse{
+				Name:  []interface{}{"n1", "n2"},
+				Key:   []interface{}{"k1", "k2"},
+				Count: 300,
+			},
 		},
 	}
 
