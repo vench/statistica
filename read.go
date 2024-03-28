@@ -79,8 +79,10 @@ func (r *SQLRepository) Metrics() ([]*Metric, error) {
 
 func makeDestFromTypes(types []*sql.ColumnType) []interface{} {
 	dest := make([]interface{}, len(types))
+
 	for i, item := range types {
 		if item.DatabaseTypeName() != "" {
+			// @todo: use type memory cache for reflect.New
 			dest[i] = reflect.New(item.ScanType()).Interface()
 		} else {
 			dest[i] = new(interface{})
@@ -137,6 +139,10 @@ func (r *SQLRepository) Total(req *ItemsRequest) (uint64, error) {
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
 	return 0, nil
 }
 
@@ -164,6 +170,7 @@ func (r *SQLRepository) Values(req *ItemsRequest) ([]*ValueResponse, error) {
 	}
 
 	response := make([]*ValueResponse, 0)
+
 	for rows.Next() {
 		dest := makeDestFromTypes(types)
 
@@ -185,7 +192,12 @@ func (r *SQLRepository) Values(req *ItemsRequest) ([]*ValueResponse, error) {
 				itemResp.Count = castValueNumber(dest[i])
 			}
 		}
+
 		response = append(response, itemResp)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return response, nil
@@ -220,6 +232,7 @@ func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemRow, error) {
 	r.logger.Debug("types", zap.Reflect("types", types))
 
 	response := make([]*ItemRow, 0)
+
 	for rows.Next() {
 		dest := makeDestFromTypes(types)
 
@@ -239,7 +252,12 @@ func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemRow, error) {
 				itemResp.Metrics[types[i].Name()] = castValueNumber(dest[i])
 			}
 		}
+
 		response = append(response, itemResp)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return response, nil
@@ -247,13 +265,16 @@ func (r *SQLRepository) Grouped(req *ItemsRequest) ([]*ItemRow, error) {
 
 func (r *SQLRepository) applyGroup(req *ItemsRequest, query *string) {
 	dimGroup := make([]string, 0)
+
 	for _, item := range req.Groups {
 		field, exists := r.getDimension(DimensionKey(item))
 		if !exists {
 			continue
 		}
+
 		dimGroup = append(dimGroup, field.Expression)
 	}
+
 	if len(dimGroup) > 0 {
 		*query += ` GROUP BY  ` + strings.Join(dimGroup, ",")
 	}
@@ -261,6 +282,7 @@ func (r *SQLRepository) applyGroup(req *ItemsRequest, query *string) {
 
 func (r *SQLRepository) applyOrder(req *ItemsRequest, query *string) {
 	sortBy := make([]string, 0)
+
 	if len(req.SortBy) > 0 {
 		for _, item := range req.SortBy {
 			field, exists := r.getDimension(DimensionKey(item.Key))
@@ -280,6 +302,7 @@ func (r *SQLRepository) applyOrder(req *ItemsRequest, query *string) {
 
 func (r *SQLRepository) Ping() error {
 	_, err := r.conn.Exec(`SELECT 1`)
+
 	return err
 }
 
@@ -287,9 +310,11 @@ func (r *SQLRepository) getDimension(key DimensionKey) (*Dimension, bool) {
 	if dim, ok := r.mapDimensions[key]; ok {
 		return dim, true
 	}
+
 	return nil, false
 }
 
+//nolint:cyclop
 func (r *SQLRepository) applyWhere(req *ItemsRequest, query *string, params *[]interface{}) {
 	where := ""
 
@@ -349,16 +374,19 @@ func (r *SQLRepository) applyWhere(req *ItemsRequest, query *string, params *[]i
 func (r *SQLRepository) applySelectTotal(req *ItemsRequest, query *string) {
 	if len(req.Groups) > 0 {
 		dimGroup := make([]string, 0)
+
 		for _, item := range req.Groups {
 			dim, exists := r.getDimension(DimensionKey(item))
 			if !exists {
 				continue
 			}
+
 			dimGroup = append(dimGroup, dim.Expression)
 		}
 
-		// TODO remove uniq
+		// @TODO: remove uniq
 		*query += fmt.Sprintf("SELECT uniq(%s) AS %s", strings.Join(dimGroup, ","), r.getTotalColumnName())
+
 		return
 	}
 
@@ -378,15 +406,19 @@ func (r *SQLRepository) applySelectValue(req *ItemsRequest, query *string) {
 
 	if len(req.Groups) > 0 {
 		dimGroup := make([]string, 0)
+
 		for _, item := range req.Groups {
 			field, exists := r.getDimension(DimensionKey(item))
 			if !exists {
 				continue
 			}
+
 			dimGroup = append(dimGroup, field.Expression)
 		}
+
 		*query += strings.Join(dimGroup, ",") + ", "
 	}
+
 	*query += fmt.Sprintf("count(*) AS %s", r.getTotalColumnName())
 }
 
@@ -395,13 +427,16 @@ func (r *SQLRepository) applySelect(req *ItemsRequest, query *string) {
 
 	if len(req.Groups) > 0 {
 		dimGroup := make([]string, 0)
+
 		for _, item := range req.Groups {
 			field, exists := r.getDimension(DimensionKey(item))
 			if !exists {
 				continue
 			}
+
 			dimGroup = append(dimGroup, field.Expression)
 		}
+
 		*query += strings.Join(dimGroup, ",") + ", "
 	}
 
@@ -423,8 +458,11 @@ func (r *SQLRepository) applyLimit(req *ItemsRequest, query *string) {
 }
 
 func unwrapPointerInterface(i interface{}) interface{} {
-	if pv, ok := i.(*interface{}); ok {
-		return *pv
+	switch t := i.(type) {
+	case *interface{}:
+		return *t
+	case *string:
+		return *t
 	}
 
 	return i
@@ -472,6 +510,7 @@ func castFloat64(value interface{}) (float64, bool) {
 	return 0, false
 }
 
+//nolint:cyclop
 func castUInt64(value interface{}) (uint64, bool) {
 	switch t := value.(type) {
 	case uint64:
@@ -499,6 +538,7 @@ func castUInt64(value interface{}) (uint64, bool) {
 	return 0, false
 }
 
+//nolint:cyclop
 func castInt64(value interface{}) (int64, bool) {
 	switch t := value.(type) {
 	case int64:

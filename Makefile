@@ -20,7 +20,7 @@ build:
 .PHONY: test
 test: GO_TEST_FLAGS += -race
 test:
-	$(V)go test -mod=vendor $(GO_TEST_FLAGS) --tags=$(GO_TEST_TAGS) ./...
+	$(V)go test -mod=vendor $(GO_TEST_FLAGS) --tags=$(GO_TEST_TAGS) .
 
 .PHONY: generate
 generate:
@@ -28,12 +28,12 @@ generate:
 
 .PHONY: lint
 lint:
-	$(V)./bin/golangci-lint run
+	$(V)./bin/golangci-lint run -c ./.golangci.yaml .
 
 .PHONY: lint-install
 lint-install:
-	$(V)wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.44.0
-	$(v)./bin/golangci-lint --version
+	$(V)wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.55.2
+	$(V)./bin/golangci-lint --version
 
 .PHONY: precommit
 precommit: lint test build
